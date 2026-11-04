@@ -396,6 +396,8 @@ export default function App() {
       .then((profile) => {
         if (cancelled) return;
         if (profile) {
+          // Debug aid: everything Feishu returned for this user (no tokens)
+          console.log("[feishu] SSO data", profile.raw);
           setFeishu({ status: "signed-in", profile, error: "" });
           applyProfile(profile);
         } else {

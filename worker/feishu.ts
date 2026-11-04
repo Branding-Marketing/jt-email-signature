@@ -24,6 +24,8 @@ export interface FeishuProfile {
   titleIssue?: string;
   /** Avatar as a data: URL so the browser can draw it on a canvas without CORS issues */
   avatarDataUrl: string;
+  /** Unmodified Feishu responses, logged in the browser console for debugging */
+  raw: { user_info: unknown; directory_mget: Record<string, unknown> };
 }
 
 interface FeishuEnvelope<T> {
@@ -136,6 +138,8 @@ interface DirectoryInfo {
   titleIssue?: string;
   /** 别名 in the Feishu directory */
   alias: string;
+  /** Raw mget response (or error) per identity tried */
+  raw: Record<string, unknown>;
 }
 
 /**
@@ -150,6 +154,7 @@ async function fetchDirectoryInfo(creds: FeishuCredentials, openId: string, user
   const path = '/directory/v1/employees/mget?employee_id_type=open_id';
   const titleIssues: string[] = [];
   let alias = '';
+  const raw: Record<string, unknown> = {};
   const attempts: [string, () => Promise<string>][] = [
     ['app', () => getTenantAccessToken(creds)],
     ['user', async () => userToken],
@@ -157,6 +162,7 @@ async function fetchDirectoryInfo(creds: FeishuCredentials, openId: string, user
   for (const [identity, getToken] of attempts) {
     try {
       const data = await feishuFetch<MgetResponse>(path, { method: 'POST', body, token: await getToken() });
+      raw[identity] = data;
       const abnormal = data.abnormals?.[0];
       const fieldErrors = abnormal?.field_errors ?? {};
       if (abnormal?.row_error) {
@@ -171,16 +177,17 @@ async function fetchDirectoryInfo(creds: FeishuCredentials, openId: string, user
       const positions = employee?.work_info?.positions ?? [];
       const main = positions.find((p) => p.is_main_position) ?? positions[0];
       const title = main ? textOf(main.position_name) : '';
-      if (title) return { title, alias };
+      if (title) return { title, alias, raw };
       const code = fieldErrors[POSITIONS_FIELD];
       titleIssues.push(`${identity} identity: ${code ? FIELD_ERRORS[code] ?? code : 'no position set in Feishu'}`);
     } catch (err) {
+      raw[identity] = { error: (err as Error).message };
       titleIssues.push(`${identity} identity: ${(err as Error).message}`);
     }
   }
   const titleIssue = titleIssues.join('; ');
   console.warn('[feishu] position lookup failed:', titleIssue);
-  return { title: '', titleIssue, alias };
+  return { title: '', titleIssue, alias, raw };
 }
 
 async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
@@ -212,5 +219,6 @@ export async function loadProfile(creds: FeishuCredentials, userToken: string): 
     title: directory.title,
     titleIssue: directory.titleIssue,
     avatarDataUrl,
+    raw: { user_info: info, directory_mget: directory.raw },
   };
 }
