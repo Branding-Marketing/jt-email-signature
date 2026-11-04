@@ -106,16 +106,6 @@ function getBannerModeMeta(mode) {
 }
 
 // ---------- Feishu auto-fill ----------
-// Base URL of the Feishu auth Worker, injected at build time. Empty hides the Feishu panel.
-const FEISHU_AUTH_URL = (process.env.FEISHU_AUTH_URL || "").replace(/\/$/, "");
-const FEISHU_TOKEN_KEY = "jt-sig-feishu-token";
-
-const storage = {
-  get: () => { try { return sessionStorage.getItem(FEISHU_TOKEN_KEY); } catch { return null; } },
-  set: (v) => { try { sessionStorage.setItem(FEISHU_TOKEN_KEY, v); } catch {} },
-  clear: () => { try { sessionStorage.removeItem(FEISHU_TOKEN_KEY); } catch {} },
-};
-
 const FEISHU_ERRORS = {
   denied: "Feishu sign-in was cancelled.",
   invalid_state: "Feishu sign-in expired. Please try again.",
@@ -390,21 +380,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!FEISHU_AUTH_URL) return;
-    // The auth Worker returns either ?feishu=<error> or #feishu_token=<token>
+    // The login callback returns here with ?feishu=<error> when something went wrong
     const params = new URLSearchParams(window.location.search);
     const loginError = FEISHU_ERRORS[params.get("feishu")] || "";
-    const hashToken = new URLSearchParams(window.location.hash.slice(1)).get("feishu_token");
-    if (hashToken) storage.set(hashToken);
-    if (params.has("feishu") || hashToken) window.history.replaceState(null, "", window.location.pathname);
-
-    const token = storage.get();
-    if (!token) {
-      setFeishu({ status: "signed-out", profile: null, error: loginError });
-      return;
-    }
+    if (params.has("feishu")) window.history.replaceState(null, "", window.location.pathname);
     let cancelled = false;
-    fetch(`${FEISHU_AUTH_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch("/api/me", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null)
       .then((profile) => {
@@ -413,16 +394,15 @@ export default function App() {
           setFeishu({ status: "signed-in", profile, error: "" });
           applyProfile(profile);
         } else {
-          storage.clear();
-          setFeishu({ status: "signed-out", profile: null, error: "Your Feishu sign-in has expired. Please sign in again." });
+          setFeishu({ status: "signed-out", profile: null, error: loginError });
         }
       });
     return () => { cancelled = true; };
   }, [applyProfile]);
 
-  const signInWithFeishu = () => { window.location.href = `${FEISHU_AUTH_URL}/api/auth/feishu/login`; };
-  const signOutOfFeishu = () => {
-    storage.clear();
+  const signInWithFeishu = () => { window.location.href = "/api/auth/feishu/login"; };
+  const signOutOfFeishu = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch {}
     setFeishu({ status: "signed-out", profile: null, error: "" });
   };
 
@@ -797,12 +777,12 @@ export default function App() {
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           {/* LEFT: form */}
           <div style={{ flex: "1 1 360px", minWidth: 320, background: "#fff", borderRadius: 10, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-            {FEISHU_AUTH_URL && <FeishuPanel
+            <FeishuPanel
               feishu={feishu}
               onSignIn={signInWithFeishu}
               onRefill={() => feishu.profile && applyProfile(feishu.profile)}
               onSignOut={signOutOfFeishu}
-            />}
+            />
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Full name *</label>
               <input style={inputStyle} value={form.name} onChange={update("name")} placeholder="Full name" />

@@ -5,12 +5,10 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "dev": "concurrently -n worker,client \"npm:dev:worker\" \"npm:dev:client\"",
-    "dev:worker": "wrangler dev --port 8787",
-    "dev:client": "webpack serve --mode development",
+    "dev": "webpack --mode development && concurrently -n webpack,worker \"webpack --mode development --watch\" \"wrangler dev --port 3000\"",
     "build": "webpack --mode production",
     "typecheck": "tsc -p worker/tsconfig.json",
-    "deploy:worker": "wrangler deploy"
+    "deploy": "npm run build && wrangler deploy"
   },
   "engines": {
     "node": ">=22"
@@ -29,7 +27,6 @@
     "typescript": "5.9",
     "webpack": "^5.112.2",
     "webpack-cli": "^7.3.1",
-    "webpack-dev-server": "^6.1.0",
     "wrangler": "^4.157.0"
   }
 }
