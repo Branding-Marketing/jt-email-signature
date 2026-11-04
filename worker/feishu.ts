@@ -1,7 +1,12 @@
-import { config } from './config';
+import { toBase64 } from './crypto';
 
 const OPEN_API = 'https://open.feishu.cn/open-apis';
 const AUTHORIZE_URL = 'https://accounts.feishu.cn/open-apis/authen/v1/authorize';
+
+export interface FeishuCredentials {
+  appId: string;
+  appSecret: string;
+}
 
 export interface FeishuProfile {
   openId: string;
@@ -18,6 +23,7 @@ export interface FeishuProfile {
 interface FeishuEnvelope<T> {
   code: number;
   msg?: string;
+  error_description?: string;
   data?: T;
 }
 
@@ -25,48 +31,46 @@ async function feishuFetch<T>(path: string, init: RequestInit & { token?: string
   const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8' };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
   const res = await fetch(`${OPEN_API}${path}`, { ...init, headers });
-  const body = (await res.json().catch(() => ({}))) as FeishuEnvelope<T> & Record<string, unknown>;
+  const body = (await res.json().catch(() => ({}))) as FeishuEnvelope<T>;
   if (!res.ok || body.code !== 0) {
     throw new Error(`Feishu ${path} failed: HTTP ${res.status}, code ${body.code}, ${body.msg ?? body.error_description ?? ''}`);
   }
+  // Some endpoints (tokens) return their fields at the top level rather than under `data`
   return (body.data ?? body) as T;
 }
 
-export function buildAuthorizeUrl(state: string, redirectUri: string): string {
+export function buildAuthorizeUrl(creds: FeishuCredentials, state: string, redirectUri: string): string {
   const url = new URL(AUTHORIZE_URL);
-  url.searchParams.set('client_id', config.feishu.appId);
+  url.searchParams.set('client_id', creds.appId);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('state', state);
-  if (config.feishu.oauthScope) url.searchParams.set('scope', config.feishu.oauthScope);
   return url.toString();
 }
 
 /** Exchanges the OAuth code for a user_access_token (OAuth v2 endpoint). */
-async function exchangeCode(code: string, redirectUri: string): Promise<string> {
-  const data = await feishuFetch<{ access_token: string }>('/authen/v2/oauth/token', {
+export async function exchangeCode(creds: FeishuCredentials, code: string, redirectUri: string) {
+  return feishuFetch<{ access_token: string; expires_in: number }>('/authen/v2/oauth/token', {
     method: 'POST',
     body: JSON.stringify({
       grant_type: 'authorization_code',
-      client_id: config.feishu.appId,
-      client_secret: config.feishu.appSecret,
+      client_id: creds.appId,
+      client_secret: creds.appSecret,
       code,
       redirect_uri: redirectUri,
     }),
   });
-  return data.access_token;
 }
 
+// Cached per Worker isolate; refreshed five minutes before expiry
 let tenantToken: { value: string; expires: number } | null = null;
 
-async function getTenantAccessToken(): Promise<string> {
+async function getTenantAccessToken(creds: FeishuCredentials): Promise<string> {
   if (tenantToken && tenantToken.expires > Date.now()) return tenantToken.value;
-  // This endpoint returns its fields at the top level rather than under `data`
-  const data = await feishuFetch<{ tenant_access_token: string; expire: number }>(
-    '/auth/v3/tenant_access_token/internal',
-    { method: 'POST', body: JSON.stringify({ app_id: config.feishu.appId, app_secret: config.feishu.appSecret }) },
-  );
-  // Refresh five minutes early
+  const data = await feishuFetch<{ tenant_access_token: string; expire: number }>('/auth/v3/tenant_access_token/internal', {
+    method: 'POST',
+    body: JSON.stringify({ app_id: creds.appId, app_secret: creds.appSecret }),
+  });
   tenantToken = { value: data.tenant_access_token, expires: Date.now() + (data.expire - 300) * 1000 };
   return tenantToken.value;
 }
@@ -102,10 +106,10 @@ interface Position {
  * Needs scope directory:employee.work.positions:read. Uses the app identity first
  * and falls back to the user's own token, whichever the tenant admin approved.
  */
-async function fetchPositionTitle(openId: string, userToken: string): Promise<string> {
+async function fetchPositionTitle(creds: FeishuCredentials, openId: string, userToken: string): Promise<string> {
   const body = JSON.stringify({ employee_ids: [openId], required_fields: ['work_info.positions'] });
   const path = '/directory/v1/employees/mget?employee_id_type=open_id';
-  for (const getToken of [getTenantAccessToken, async () => userToken]) {
+  for (const getToken of [() => getTenantAccessToken(creds), async () => userToken]) {
     try {
       const data = await feishuFetch<{ employees?: unknown[]; items?: unknown[] }>(path, {
         method: 'POST',
@@ -129,19 +133,17 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
     const res = await fetch(url);
     if (!res.ok) return '';
     const type = res.headers.get('content-type') ?? 'image/jpeg';
-    const buf = Buffer.from(await res.arrayBuffer());
-    return `data:${type};base64,${buf.toString('base64')}`;
+    return `data:${type};base64,${toBase64(await res.arrayBuffer())}`;
   } catch (err) {
     console.warn('[feishu] avatar download failed:', (err as Error).message);
     return '';
   }
 }
 
-export async function loadProfileFromCode(code: string, redirectUri: string): Promise<FeishuProfile> {
-  const userToken = await exchangeCode(code, redirectUri);
+export async function loadProfile(creds: FeishuCredentials, userToken: string): Promise<FeishuProfile> {
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
   const [title, avatarDataUrl] = await Promise.all([
-    fetchPositionTitle(info.open_id, userToken),
+    fetchPositionTitle(creds, info.open_id, userToken),
     fetchAvatarDataUrl(info.avatar_big || info.avatar_url),
   ]);
   return {

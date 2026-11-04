@@ -1,0 +1,10 @@
+# Cloudflare Worker that handles Feishu login for the signature page.
+# Secrets (FEISHU_APP_ID, FEISHU_APP_SECRET, SESSION_SECRET) are uploaded by the deploy workflow.
+name = "jt-signature-auth"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# Overridden at deploy time with the GitHub Pages URL
+APP_URL = "http://localhost:3000/"
