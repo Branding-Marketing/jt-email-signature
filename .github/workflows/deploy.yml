@@ -4,7 +4,8 @@ name: Deploy
 # as a single Cloudflare Worker.
 on:
   push:
-    branches: [main]
+    # feature/feishu-integration is included so the branch can be previewed before merging
+    branches: [main, feature/feishu-integration]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +25,20 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
+
+      - name: Check required secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: |
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID FEISHU_APP_ID FEISHU_APP_SECRET SESSION_SECRET; do
+            if [ -z "${!name}" ]; then echo "::error::Repository secret $name is not set"; missing=1; fi
+          done
+          exit $missing
 
       - run: npm ci
       - run: npm run typecheck
