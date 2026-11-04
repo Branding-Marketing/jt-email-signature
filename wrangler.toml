@@ -5,6 +5,12 @@ main = "worker/index.ts"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+[vars]
+# User-identity scopes requested at login. Every scope listed must be enabled for the app
+# in the Feishu console, or Feishu rejects the login. Add e.g. contact:user.email:readonly
+# (email) or contact:user.phone:readonly (mobile) once they are approved.
+FEISHU_OAUTH_SCOPE = "directory:employee.work.positions:read"
+
 [assets]
 directory = "./dist/public"
 binding = "ASSETS"

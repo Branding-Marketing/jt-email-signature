@@ -6,6 +6,8 @@ const AUTHORIZE_URL = 'https://accounts.feishu.cn/open-apis/authen/v1/authorize'
 export interface FeishuCredentials {
   appId: string;
   appSecret: string;
+  /** User-identity scopes requested at login (space separated) */
+  scope: string;
 }
 
 export interface FeishuProfile {
@@ -45,6 +47,8 @@ export function buildAuthorizeUrl(creds: FeishuCredentials, state: string, redir
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('state', state);
+  // OAuth v2 only grants user-identity scopes that are requested explicitly here
+  if (creds.scope) url.searchParams.set('scope', creds.scope);
   return url.toString();
 }
 
