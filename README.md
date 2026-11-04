@@ -13,7 +13,7 @@ A single **Cloudflare Worker** (`jt-signature`) serves everything:
   flow. It is stateless: the Feishu user token is sealed (AES-GCM, keyed by
   `SESSION_SECRET`) into an HttpOnly cookie, so no KV or database is needed.
 
-`.github/workflows/deploy.yml` builds and deploys the Worker on every push to `main`.
+Deployment is manual from a local machine with the wrangler CLI (no CI).
 
 The root `index.html` is the old self-contained build and is no longer the source of truth.
 
@@ -29,26 +29,29 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 
 ## One-time setup
 
-### GitHub
-
-Settings → Secrets and variables → Actions → repository secrets:
-
-| Secret | Purpose |
-| --- | --- |
-| `FEISHU_APP_ID` | Feishu App ID (`cli_...`) |
-| `FEISHU_APP_SECRET` | Feishu App Secret |
-| `SESSION_SECRET` | Random string, e.g. `openssl rand -hex 32` |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with the "Edit Cloudflare Workers" template |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
-
 ### Feishu Developer Console
 
 1. Enable the **Web App** capability.
 2. Security Settings → Redirect URLs: add `https://<worker host>/api/auth/feishu/callback`
-   (the deploy log prints the exact URL; add a custom domain's URL too if you attach one).
+   (`npm run deploy` prints the Worker host; add a custom domain's URL too if you attach one).
 3. Permissions: request `directory:employee.work.positions:read`. Name and avatar come
    from the login itself and need no extra scope.
 4. Publish a version so the tenant admin can approve it.
+
+## Deploy (local CLI)
+
+```bash
+npm ci
+npx wrangler login                     # once per machine
+npm run deploy                         # builds the page and deploys the Worker
+
+# Once (and whenever a value changes). Each command prompts for the value.
+npx wrangler secret put FEISHU_APP_ID
+npx wrangler secret put FEISHU_APP_SECRET
+openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+```
+
+Secrets live in Cloudflare, not in this repository. Changing `SESSION_SECRET` signs everyone out.
 
 ## Development
 
@@ -59,4 +62,3 @@ npm run dev                      # http://localhost:3000 (webpack --watch + wran
 ```
 
 For local login, also whitelist `http://localhost:3000/api/auth/feishu/callback` in Feishu.
-Manual deploy without CI: `npx wrangler login && npm run deploy`.
