@@ -134,8 +134,8 @@ function toCircularPng(src, size = 400) {
   });
 }
 
-// Prefer the English name for an Australian signature, falling back to the display name.
-const profileName = (p) => (p.enName || p.name || "").trim();
+// Prefer the Feishu alias (别名), then the English name, then the display name.
+const profileName = (p) => (p.alias || p.enName || p.name || "").trim();
 
 function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
   const box = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", marginBottom: 18, borderRadius: 8, border: "1px solid #eef0f1", background: "#fafafa" };

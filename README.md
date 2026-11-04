@@ -34,8 +34,11 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 1. Enable the **Web App** capability.
 2. Security Settings → Redirect URLs: add `https://<worker host>/api/auth/feishu/callback`
    (`npm run deploy` prints the Worker host; add a custom domain's URL too if you attach one).
-3. Permissions: request `directory:employee.work.positions:read`. Name and avatar come
-   from the login itself and need no extra scope.
+3. Permissions (app identity): `directory:employee:read` and
+   `directory:employee.work.positions:read` for the position, plus
+   `directory:employee.base.name.another_name:read` for the alias (别名), which is used as
+   the signature name when set. The contact permission range must cover all staff.
+   Name and avatar also come from the login itself and need no extra scope.
 4. Publish a version so the tenant admin can approve it.
 
 ## Deploy (local CLI)

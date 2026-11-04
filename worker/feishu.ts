@@ -14,6 +14,8 @@ export interface FeishuProfile {
   openId: string;
   name: string;
   enName: string;
+  /** 别名 from the directory, empty when unavailable */
+  alias: string;
   email: string;
   mobile: string;
   /** Main position name from the directory, empty when unavailable */
@@ -107,8 +109,13 @@ interface Position {
   is_main_position?: boolean;
 }
 
+interface MgetEmployee {
+  base_info?: { name?: { another_name?: string } };
+  work_info?: { positions?: Position[] };
+}
+
 interface MgetResponse {
-  employees?: { work_info?: { positions?: Position[] } }[];
+  employees?: MgetEmployee[];
   /** Per-row / per-field failures; the call itself still returns code 0 */
   abnormals?: { id?: string; row_error?: number; field_errors?: Record<string, number> }[];
 }
@@ -121,20 +128,28 @@ const FIELD_ERRORS: Record<number, string> = {
   2003: 'field does not exist',
 };
 
+const POSITIONS_FIELD = 'work_info.positions';
+const ALIAS_FIELD = 'base_info.name.another_name';
+
+interface DirectoryInfo {
+  title: string;
+  titleIssue?: string;
+  /** 别名 in the Feishu directory */
+  alias: string;
+}
+
 /**
- * Reads the employee's main position via the directory API (POST employees/mget).
- * Requires directory:employee:read plus directory:employee.work.positions:read on the
- * app identity, and the user must be inside the app's contact permission range.
- * The user token is only tried as a fallback: Feishu checks it against admin scope.
+ * Reads the employee's main position and alias via the directory API (POST employees/mget).
+ * App identity needs directory:employee:read, directory:employee.work.positions:read and,
+ * for the alias, directory:employee.base.name.another_name:read; the user must be inside
+ * the app's contact permission range. A missing field scope only blanks that field.
+ * The user token is a fallback only: Feishu checks it against the user's admin scope.
  */
-async function fetchPositionTitle(
-  creds: FeishuCredentials,
-  openId: string,
-  userToken: string,
-): Promise<{ title: string; issue?: string }> {
-  const body = JSON.stringify({ employee_ids: [openId], required_fields: ['work_info.positions'] });
+async function fetchDirectoryInfo(creds: FeishuCredentials, openId: string, userToken: string): Promise<DirectoryInfo> {
+  const body = JSON.stringify({ employee_ids: [openId], required_fields: [POSITIONS_FIELD, ALIAS_FIELD] });
   const path = '/directory/v1/employees/mget?employee_id_type=open_id';
-  const issues: string[] = [];
+  const titleIssues: string[] = [];
+  let alias = '';
   const attempts: [string, () => Promise<string>][] = [
     ['app', () => getTenantAccessToken(creds)],
     ['user', async () => userToken],
@@ -143,26 +158,29 @@ async function fetchPositionTitle(
     try {
       const data = await feishuFetch<MgetResponse>(path, { method: 'POST', body, token: await getToken() });
       const abnormal = data.abnormals?.[0];
-      if (abnormal) {
-        const fields = Object.entries(abnormal.field_errors ?? {})
-          .map(([f, c]) => `${f}: ${FIELD_ERRORS[c] ?? c}`)
-          .join(', ');
-        const row = abnormal.row_error ? `row: ${FIELD_ERRORS[abnormal.row_error] ?? abnormal.row_error}` : '';
-        issues.push(`${identity} identity: ${[row, fields].filter(Boolean).join(', ') || 'unknown'}`);
+      const fieldErrors = abnormal?.field_errors ?? {};
+      if (abnormal?.row_error) {
+        titleIssues.push(`${identity} identity: ${FIELD_ERRORS[abnormal.row_error] ?? abnormal.row_error}`);
         continue;
       }
-      const positions = data.employees?.[0]?.work_info?.positions ?? [];
+      const employee = data.employees?.[0];
+      alias ||= (employee?.base_info?.name?.another_name ?? '').trim();
+      if (fieldErrors[ALIAS_FIELD]) {
+        console.warn(`[feishu] alias unavailable (${identity} identity): ${FIELD_ERRORS[fieldErrors[ALIAS_FIELD]] ?? fieldErrors[ALIAS_FIELD]}`);
+      }
+      const positions = employee?.work_info?.positions ?? [];
       const main = positions.find((p) => p.is_main_position) ?? positions[0];
       const title = main ? textOf(main.position_name) : '';
-      if (title) return { title };
-      issues.push(`${identity} identity: no position set in Feishu`);
+      if (title) return { title, alias };
+      const code = fieldErrors[POSITIONS_FIELD];
+      titleIssues.push(`${identity} identity: ${code ? FIELD_ERRORS[code] ?? code : 'no position set in Feishu'}`);
     } catch (err) {
-      issues.push(`${identity} identity: ${(err as Error).message}`);
+      titleIssues.push(`${identity} identity: ${(err as Error).message}`);
     }
   }
-  const issue = issues.join('; ');
-  console.warn('[feishu] position lookup failed:', issue);
-  return { title: '', issue };
+  const titleIssue = titleIssues.join('; ');
+  console.warn('[feishu] position lookup failed:', titleIssue);
+  return { title: '', titleIssue, alias };
 }
 
 async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
@@ -180,18 +198,19 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
 
 export async function loadProfile(creds: FeishuCredentials, userToken: string): Promise<FeishuProfile> {
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
-  const [position, avatarDataUrl] = await Promise.all([
-    fetchPositionTitle(creds, info.open_id, userToken),
+  const [directory, avatarDataUrl] = await Promise.all([
+    fetchDirectoryInfo(creds, info.open_id, userToken),
     fetchAvatarDataUrl(info.avatar_big || info.avatar_url),
   ]);
   return {
     openId: info.open_id,
     name: info.name ?? '',
     enName: info.en_name ?? '',
+    alias: directory.alias,
     email: info.enterprise_email || info.email || '',
     mobile: info.mobile ?? '',
-    title: position.title,
-    titleIssue: position.issue,
+    title: directory.title,
+    titleIssue: directory.titleIssue,
     avatarDataUrl,
   };
 }
