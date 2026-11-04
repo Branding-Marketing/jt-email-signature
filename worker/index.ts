@@ -5,6 +5,8 @@ export interface Env {
   FEISHU_APP_ID: string;
   FEISHU_APP_SECRET: string;
   SESSION_SECRET: string;
+  /** Optional override for the scopes requested at login, see wrangler.toml */
+  FEISHU_OAUTH_SCOPE?: string;
   /** Static assets built by Webpack (dist/public), see wrangler.toml */
   ASSETS: Fetcher;
 }
@@ -21,7 +23,11 @@ const SESSION_COOKIE = 'jt_sig_session';
 const CALLBACK_PATH = '/api/auth/feishu/callback';
 
 function credentials(env: Env): FeishuCredentials {
-  return { appId: env.FEISHU_APP_ID, appSecret: env.FEISHU_APP_SECRET };
+  return {
+    appId: env.FEISHU_APP_ID,
+    appSecret: env.FEISHU_APP_SECRET,
+    scope: (env.FEISHU_OAUTH_SCOPE ?? 'directory:employee.work.positions:read').trim(),
+  };
 }
 
 function readCookie(req: Request, name: string): string | null {
