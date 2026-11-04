@@ -13,7 +13,7 @@ A single **Cloudflare Worker** (`jt-signature`) serves everything:
   flow. It is stateless: the Feishu user token is sealed (AES-GCM, keyed by
   `SESSION_SECRET`) into an HttpOnly cookie, so no KV or database is needed.
 
-`.github/workflows/deploy.yml` builds and deploys the Worker on every push to `main`.
+Deploys are run by hand from a local machine with the Wrangler CLI (see [Deploy](#deploy)); nothing deploys automatically on push.
 
 The root `index.html` is the old self-contained build and is no longer the source of truth.
 
@@ -29,23 +29,23 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 
 ## One-time setup
 
-### GitHub
+### Cloudflare
 
-Settings → Secrets and variables → Actions → repository secrets:
+Sign in and upload the Worker secrets once. Each command prompts for the value:
 
-| Secret | Purpose |
-| --- | --- |
-| `FEISHU_APP_ID` | Feishu App ID (`cli_...`) |
-| `FEISHU_APP_SECRET` | Feishu App Secret |
-| `SESSION_SECRET` | Random string, e.g. `openssl rand -hex 32` |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with the "Edit Cloudflare Workers" template |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
+```bash
+npm install
+npx wrangler login
+npx wrangler secret put FEISHU_APP_ID       # Feishu App ID (cli_...)
+npx wrangler secret put FEISHU_APP_SECRET   # Feishu App Secret
+npx wrangler secret put SESSION_SECRET      # Random string, e.g. openssl rand -hex 32
+```
 
 ### Feishu Developer Console
 
 1. Enable the **Web App** capability.
 2. Security Settings → Redirect URLs: add `https://<worker host>/api/auth/feishu/callback`
-   (the deploy log prints the exact URL; add a custom domain's URL too if you attach one).
+   (`npm run deploy` prints the Worker host; add a custom domain's URL too if you attach one).
 3. Permissions: request `directory:employee.work.positions:read`. Name and avatar come
    from the login itself and need no extra scope.
 4. Publish a version so the tenant admin can approve it.
@@ -59,4 +59,9 @@ npm run dev                      # http://localhost:3000 (webpack --watch + wran
 ```
 
 For local login, also whitelist `http://localhost:3000/api/auth/feishu/callback` in Feishu.
-Manual deploy without CI: `npx wrangler login && npm run deploy`.
+
+## Deploy
+
+```bash
+npm run deploy   # builds the page, then runs wrangler deploy
+```

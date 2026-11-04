@@ -1,5 +1,5 @@
 # One Cloudflare Worker serves both the signature page and the Feishu login API.
-# Secrets (FEISHU_APP_ID, FEISHU_APP_SECRET, SESSION_SECRET) are uploaded by the deploy workflow.
+# Secrets (FEISHU_APP_ID, FEISHU_APP_SECRET, SESSION_SECRET) are set with `wrangler secret put`.
 name = "jt-signature"
 main = "worker/index.ts"
 compatibility_date = "2026-10-01"
