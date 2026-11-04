@@ -10,11 +10,10 @@ export const config = {
   feishu: {
     appId: required('FEISHU_APP_ID'),
     appSecret: required('FEISHU_APP_SECRET'),
-    redirectUri: required('FEISHU_REDIRECT_URI'),
+    // Optional override; by default the callback URL is derived from the incoming request
+    redirectUri: process.env.FEISHU_REDIRECT_URI ?? '',
     // Optional extra user-identity scopes, space separated
     oauthScope: process.env.FEISHU_OAUTH_SCOPE ?? '',
   },
   sessionSecret: required('SESSION_SECRET'),
-  // Cookies are marked Secure whenever the public callback URL is HTTPS
-  secureCookies: (process.env.FEISHU_REDIRECT_URI ?? '').startsWith('https://'),
 };

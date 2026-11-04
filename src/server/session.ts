@@ -28,11 +28,11 @@ export function readCookie(req: Request, name: string): string | undefined {
   return undefined;
 }
 
-export function setCookie(res: Response, name: string, value: string, maxAgeMs: number): void {
+export function setCookie(req: Request, res: Response, name: string, value: string, maxAgeMs: number): void {
   res.cookie(name, value, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: config.secureCookies,
+    secure: req.secure,
     maxAge: maxAgeMs,
     path: '/',
   });

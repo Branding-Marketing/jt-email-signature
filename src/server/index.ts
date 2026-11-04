@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import express from 'express';
+import express, { type Request } from 'express';
 import { config } from './config';
 import { buildAuthorizeUrl, loadProfileFromCode, type FeishuProfile } from './feishu';
 import { MemoryStore, clearCookie, readCookie, setCookie, sign, unsign } from './session';
@@ -8,6 +8,11 @@ import { MemoryStore, clearCookie, readCookie, setCookie, sign, unsign } from '.
 const SESSION_COOKIE = 'jt_sig_session';
 const STATE_COOKIE = 'jt_sig_oauth_state';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+/** Must exactly match a redirect URL whitelisted in the Feishu Developer Console. */
+function callbackUrl(req: Request): string {
+  return config.feishu.redirectUri || `${req.protocol}://${req.get('host')}/api/auth/feishu/callback`;
+}
 
 const sessions = new MemoryStore<FeishuProfile>(SESSION_TTL_MS);
 const app = express();
@@ -19,10 +24,10 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Step 1: send the browser to Feishu with a CSRF state bound to a signed cookie
-app.get('/api/auth/feishu/login', (_req, res) => {
+app.get('/api/auth/feishu/login', (req, res) => {
   const state = crypto.randomBytes(16).toString('base64url');
-  setCookie(res, STATE_COOKIE, sign(state), 10 * 60 * 1000);
-  res.redirect(buildAuthorizeUrl(state));
+  setCookie(req, res, STATE_COOKIE, sign(state), 10 * 60 * 1000);
+  res.redirect(buildAuthorizeUrl(state, callbackUrl(req)));
 });
 
 // Step 2: Feishu redirects back with ?code&state
@@ -33,9 +38,9 @@ app.get('/api/auth/feishu/callback', async (req, res) => {
   if (error || !code) return res.redirect('/?feishu=denied');
   if (!state || state !== expectedState) return res.redirect('/?feishu=invalid_state');
   try {
-    const profile = await loadProfileFromCode(code);
+    const profile = await loadProfileFromCode(code, callbackUrl(req));
     const sid = sessions.create(profile);
-    setCookie(res, SESSION_COOKIE, sign(sid), SESSION_TTL_MS);
+    setCookie(req, res, SESSION_COOKIE, sign(sid), SESSION_TTL_MS);
     res.redirect('/');
   } catch (err) {
     console.error('[feishu] login failed:', err);

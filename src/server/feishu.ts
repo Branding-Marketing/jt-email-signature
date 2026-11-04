@@ -32,10 +32,10 @@ async function feishuFetch<T>(path: string, init: RequestInit & { token?: string
   return (body.data ?? body) as T;
 }
 
-export function buildAuthorizeUrl(state: string): string {
+export function buildAuthorizeUrl(state: string, redirectUri: string): string {
   const url = new URL(AUTHORIZE_URL);
   url.searchParams.set('client_id', config.feishu.appId);
-  url.searchParams.set('redirect_uri', config.feishu.redirectUri);
+  url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('state', state);
   if (config.feishu.oauthScope) url.searchParams.set('scope', config.feishu.oauthScope);
@@ -43,7 +43,7 @@ export function buildAuthorizeUrl(state: string): string {
 }
 
 /** Exchanges the OAuth code for a user_access_token (OAuth v2 endpoint). */
-async function exchangeCode(code: string): Promise<string> {
+async function exchangeCode(code: string, redirectUri: string): Promise<string> {
   const data = await feishuFetch<{ access_token: string }>('/authen/v2/oauth/token', {
     method: 'POST',
     body: JSON.stringify({
@@ -51,7 +51,7 @@ async function exchangeCode(code: string): Promise<string> {
       client_id: config.feishu.appId,
       client_secret: config.feishu.appSecret,
       code,
-      redirect_uri: config.feishu.redirectUri,
+      redirect_uri: redirectUri,
     }),
   });
   return data.access_token;
@@ -137,8 +137,8 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
   }
 }
 
-export async function loadProfileFromCode(code: string): Promise<FeishuProfile> {
-  const userToken = await exchangeCode(code);
+export async function loadProfileFromCode(code: string, redirectUri: string): Promise<FeishuProfile> {
+  const userToken = await exchangeCode(code, redirectUri);
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
   const [title, avatarDataUrl] = await Promise.all([
     fetchPositionTitle(info.open_id, userToken),

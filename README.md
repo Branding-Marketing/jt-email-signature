@@ -30,7 +30,7 @@ Copy `.env.example` to `.env`:
 | --- | --- | --- |
 | `FEISHU_APP_ID` | no | App ID (`cli_...`) |
 | `FEISHU_APP_SECRET` | **yes** | App Secret, server only |
-| `FEISHU_REDIRECT_URI` | no | Must match a whitelisted redirect URL exactly |
+| `FEISHU_REDIRECT_URI` | no | Optional; defaults to `<site origin>/api/auth/feishu/callback` |
 | `SESSION_SECRET` | **yes** | Signs cookies, e.g. `openssl rand -hex 32` |
 | `FEISHU_OAUTH_SCOPE` | no | Optional extra user scopes, space separated |
 | `PORT` | no | Express port in production (default 3000) |
