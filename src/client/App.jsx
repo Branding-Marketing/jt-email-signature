@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from "react";
-import { Upload, Copy, Download, RotateCcw, Check, Settings, X, ZoomIn } from "lucide-react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { Upload, Copy, Download, RotateCcw, Check, Settings, X, ZoomIn, LogIn, LogOut, RefreshCw } from "lucide-react";
 
 const BRAND = {
   red: "#D9291C",
@@ -103,6 +103,80 @@ function getActiveBannerLink(admin) {
 
 function getBannerModeMeta(mode) {
   return BANNER_MODE_OPTIONS.find((option) => option.id === mode) || BANNER_MODE_OPTIONS[0];
+}
+
+// ---------- Feishu auto-fill ----------
+const FEISHU_ERRORS = {
+  denied: "Feishu sign-in was cancelled.",
+  invalid_state: "Feishu sign-in expired. Please try again.",
+  error: "Feishu sign-in failed. You can still fill in your details manually.",
+};
+
+// Re-draws the Feishu avatar as a 400×400 circular PNG, matching what the cropper produces,
+// so Outlook (which ignores border-radius) still shows a round photo.
+function toCircularPng(src, size = 400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Prefer the English name for an Australian signature, falling back to the display name.
+const profileName = (p) => (p.enName || p.name || "").trim();
+
+function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
+  const box = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", marginBottom: 18, borderRadius: 8, border: "1px solid #eef0f1", background: "#fafafa" };
+  if (feishu.status === "loading") {
+    return <div style={{ ...box, font: `400 12px ${FONT}`, color: BRAND.textSupporting }}>Checking Feishu sign-in…</div>;
+  }
+  if (feishu.status === "signed-in") {
+    const p = feishu.profile;
+    return (
+      <div style={box}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ font: `600 13px ${FONT}`, color: BRAND.text }}>Signed in with Feishu as {profileName(p) || p.name}</div>
+          <div style={{ font: `400 11px ${FONT}`, color: BRAND.textSupporting, marginTop: 2 }}>
+            Your name, position and photo were filled in from Feishu. You can still edit any field below.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button type="button" style={btnSecondary} onClick={onRefill} title="Fill again from Feishu">
+            <RefreshCw size={13} style={{ verticalAlign: -2 }} />
+          </button>
+          <button type="button" style={btnSecondary} onClick={onSignOut} title="Sign out">
+            <LogOut size={13} style={{ verticalAlign: -2 }} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={box}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ font: `600 13px ${FONT}`, color: BRAND.text }}>Auto-fill from Feishu</div>
+        <div style={{ font: `400 11px ${FONT}`, color: feishu.error ? BRAND.red : BRAND.textSupporting, marginTop: 2 }}>
+          {feishu.error || "Sign in to fill in your name, position and photo automatically."}
+        </div>
+      </div>
+      <button type="button" style={{ ...btnPrimary, flexShrink: 0 }} onClick={onSignIn}>
+        <LogIn size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
+        Sign in with Feishu
+      </button>
+    </div>
+  );
 }
 
 // ---------- Photo cropper ----------
@@ -284,6 +358,52 @@ export default function App() {
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
   const customBannerInputRef = useRef(null);
+  const [feishu, setFeishu] = useState({ status: "loading", profile: null, error: "" });
+
+  // Fills the form from a Feishu profile. Only fields Feishu actually returned are touched,
+  // so anything missing (e.g. mobile) stays editable by hand.
+  const applyProfile = useCallback(async (p) => {
+    let photo = "";
+    if (p.avatarDataUrl) {
+      try { photo = await toCircularPng(p.avatarDataUrl); } catch {}
+    }
+    setForm((f) => ({
+      ...f,
+      name: profileName(p) || f.name,
+      title: p.title || f.title,
+      email: p.email || f.email,
+      mobile: p.mobile || f.mobile,
+      photoDataUrl: photo || f.photoDataUrl,
+    }));
+    if (photo) setShowPhoto(true);
+    setErrors({});
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const loginError = FEISHU_ERRORS[params.get("feishu")] || "";
+    if (params.has("feishu")) window.history.replaceState(null, "", window.location.pathname);
+    let cancelled = false;
+    fetch("/api/me", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((profile) => {
+        if (cancelled) return;
+        if (profile) {
+          setFeishu({ status: "signed-in", profile, error: "" });
+          applyProfile(profile);
+        } else {
+          setFeishu({ status: "signed-out", profile: null, error: loginError });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [applyProfile]);
+
+  const signInWithFeishu = () => { window.location.href = "/api/auth/feishu/login"; };
+  const signOutOfFeishu = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch {}
+    setFeishu({ status: "signed-out", profile: null, error: "" });
+  };
 
   const activeBannerUrl = getActiveBannerUrl(admin);
   const activeBannerLink = getActiveBannerLink(admin);
@@ -656,6 +776,12 @@ export default function App() {
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           {/* LEFT: form */}
           <div style={{ flex: "1 1 360px", minWidth: 320, background: "#fff", borderRadius: 10, padding: 22, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <FeishuPanel
+              feishu={feishu}
+              onSignIn={signInWithFeishu}
+              onRefill={() => feishu.profile && applyProfile(feishu.profile)}
+              onSignOut={signOutOfFeishu}
+            />
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>Full name *</label>
               <input style={inputStyle} value={form.name} onChange={update("name")} placeholder="Full name" />
