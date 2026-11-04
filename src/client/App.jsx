@@ -134,8 +134,8 @@ function toCircularPng(src, size = 400) {
   });
 }
 
-// Prefer the English name for an Australian signature, falling back to the display name.
-const profileName = (p) => (p.enName || p.name || "").trim();
+// Prefer the Feishu nickname (usually the English name), then the English name, then the display name.
+const profileName = (p) => (p.nickname || p.enName || p.name || "").trim();
 
 // Fields Feishu cannot provide are remembered in this browser so staff only type them once.
 const SAVED_FIELDS_KEY = "jt-sig-saved-fields";
@@ -168,7 +168,7 @@ function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ font: `600 13px ${FONT}`, color: BRAND.text }}>Signed in with Feishu as {profileName(p) || p.name}</div>
           <div style={{ font: `400 11px ${FONT}`, color: BRAND.textSupporting, marginTop: 2 }}>
-            Your name and photo were filled in from Feishu. Please add your job title; this browser will remember it.
+            Details were filled in from Feishu where available. Anything you type is remembered in this browser.
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -394,6 +394,7 @@ export default function App() {
     setForm((f) => ({
       ...f,
       name: profileName(p) || f.name,
+      title: p.title || f.title,
       email: p.email || f.email,
       mobile: p.mobile || f.mobile,
       photoDataUrl: photo || f.photoDataUrl,

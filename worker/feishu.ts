@@ -19,6 +19,10 @@ export interface FeishuProfile {
   openId: string;
   name: string;
   enName: string;
+  /** Contact nickname (usually the English name); needs contact:user.base:readonly */
+  nickname: string;
+  /** Contact job title; needs contact:user.employee:readonly */
+  title: string;
   /** Present only when the matching contact scope is granted and requested at login */
   email: string;
   mobile: string;
@@ -81,6 +85,33 @@ interface UserInfo {
   mobile?: string;
 }
 
+interface ContactUser {
+  nickname?: string;
+  en_name?: string;
+  job_title?: string;
+  enterprise_email?: string;
+  email?: string;
+  mobile?: string;
+}
+
+/**
+ * Reads the user's own contact record (contact v3) with their token. Each field is only
+ * returned when the matching user scope was granted at login, so missing scopes just
+ * leave fields empty. Any failure is logged and treated as "no extra data".
+ */
+async function fetchContactUser(openId: string, userToken: string): Promise<ContactUser> {
+  try {
+    const data = await feishuFetch<{ user?: ContactUser }>(
+      `/contact/v3/users/${encodeURIComponent(openId)}?user_id_type=open_id`,
+      { token: userToken },
+    );
+    return data.user ?? {};
+  } catch (err) {
+    console.warn('[feishu] contact lookup failed:', (err as Error).message);
+    return {};
+  }
+}
+
 async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
   if (!url) return '';
   try {
@@ -96,12 +127,18 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
 
 export async function loadProfile(userToken: string): Promise<FeishuProfile> {
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
+  const [contact, avatarDataUrl] = await Promise.all([
+    fetchContactUser(info.open_id, userToken),
+    fetchAvatarDataUrl(info.avatar_big || info.avatar_url),
+  ]);
   return {
     openId: info.open_id,
     name: info.name ?? '',
-    enName: info.en_name ?? '',
-    email: info.enterprise_email || info.email || '',
-    mobile: info.mobile ?? '',
-    avatarDataUrl: await fetchAvatarDataUrl(info.avatar_big || info.avatar_url),
+    enName: info.en_name || contact.en_name || '',
+    nickname: (contact.nickname ?? '').trim(),
+    title: (contact.job_title ?? '').trim(),
+    email: info.enterprise_email || info.email || contact.enterprise_email || contact.email || '',
+    mobile: info.mobile || contact.mobile || '',
+    avatarDataUrl,
   };
 }

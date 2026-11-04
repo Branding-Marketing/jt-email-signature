@@ -34,11 +34,12 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 1. Enable the **Web App** capability.
 2. Security Settings → Redirect URLs: add `https://<worker host>/api/auth/feishu/callback`
    (`npm run deploy` prints the Worker host; add a custom domain's URL too if you attach one).
-3. Permissions: none beyond login are required. Name, English name and avatar come from
-   `authen/v1/user_info`. Job title is typed in by staff (and remembered in their browser)
-   because the directory API needs `directory:employee:read`, which requires admin review.
-   If `contact:user.email:readonly` / `contact:user.phone:readonly` are granted as user
-   scopes, add them to `FEISHU_OAUTH_SCOPE` in `wrangler.toml` to fill email and mobile.
+3. Permissions: none are required beyond login (name, English name, avatar). Optional
+   user-identity scopes, enabled in the console and then listed in `FEISHU_OAUTH_SCOPE`
+   in `wrangler.toml`, fill more fields via `contact/v3/users/:id`:
+   `contact:user.base:readonly` (nickname, used as the signature name),
+   `contact:user.employee:readonly` (job title), `contact:user.email:readonly`,
+   `contact:user.phone:readonly`. Never list a scope that is not enabled, or login fails.
 4. Publish a version so the tenant admin can approve it.
 
 ## Deploy (local CLI)
