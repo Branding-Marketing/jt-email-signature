@@ -37,6 +37,7 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 3. Permissions: none are required beyond login (name, English name, avatar). Optional
    user-identity scopes, enabled in the console and then listed in `FEISHU_OAUTH_SCOPE`
    in `wrangler.toml`, fill more fields via `contact/v3/users/:id`:
+   `contact:contact.base:readonly` (required for the lookup itself),
    `contact:user.base:readonly` (nickname, used as the signature name),
    `contact:user.employee:readonly` (job title), `contact:user.email:readonly`,
    `contact:user.phone:readonly`. Never list a scope that is not enabled, or login fails.
