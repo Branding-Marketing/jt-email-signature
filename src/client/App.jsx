@@ -151,6 +151,11 @@ function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
           <div style={{ font: `400 11px ${FONT}`, color: BRAND.textSupporting, marginTop: 2 }}>
             Your name, position and photo were filled in from Feishu. You can still edit any field below.
           </div>
+          {p.titleIssue && (
+            <div style={{ font: `400 11px ${FONT}`, color: BRAND.red, marginTop: 4, wordBreak: "break-word" }}>
+              Position not available from Feishu ({p.titleIssue}). Please type it in.
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <button type="button" style={btnSecondary} onClick={onRefill} title="Fill again from Feishu">
