@@ -134,8 +134,27 @@ function toCircularPng(src, size = 400) {
   });
 }
 
-// Prefer the Feishu alias (别名), then the English name, then the display name.
-const profileName = (p) => (p.alias || p.enName || p.name || "").trim();
+// Prefer the English name for an Australian signature, falling back to the display name.
+const profileName = (p) => (p.enName || p.name || "").trim();
+
+// Fields Feishu cannot provide are remembered in this browser so staff only type them once.
+const SAVED_FIELDS_KEY = "jt-sig-saved-fields";
+const SAVED_FIELDS = ["title", "mobile", "email", "linkedin"];
+
+function loadSavedFields() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVED_FIELDS_KEY) || "{}");
+    return Object.fromEntries(SAVED_FIELDS.map((k) => [k, typeof saved[k] === "string" ? saved[k] : ""]));
+  } catch {
+    return {};
+  }
+}
+
+function storeSavedFields(form) {
+  try {
+    localStorage.setItem(SAVED_FIELDS_KEY, JSON.stringify(Object.fromEntries(SAVED_FIELDS.map((k) => [k, form[k] || ""]))));
+  } catch {}
+}
 
 function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
   const box = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "12px 14px", marginBottom: 18, borderRadius: 8, border: "1px solid #eef0f1", background: "#fafafa" };
@@ -149,13 +168,8 @@ function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ font: `600 13px ${FONT}`, color: BRAND.text }}>Signed in with Feishu as {profileName(p) || p.name}</div>
           <div style={{ font: `400 11px ${FONT}`, color: BRAND.textSupporting, marginTop: 2 }}>
-            Your name, position and photo were filled in from Feishu. You can still edit any field below.
+            Your name and photo were filled in from Feishu. Please add your job title; this browser will remember it.
           </div>
-          {p.titleIssue && (
-            <div style={{ font: `400 11px ${FONT}`, color: BRAND.red, marginTop: 4, wordBreak: "break-word" }}>
-              Position not available from Feishu ({p.titleIssue}). Please type it in.
-            </div>
-          )}
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <button type="button" style={btnSecondary} onClick={onRefill} title="Fill again from Feishu">
@@ -173,7 +187,7 @@ function FeishuPanel({ feishu, onSignIn, onRefill, onSignOut }) {
       <div style={{ minWidth: 0 }}>
         <div style={{ font: `600 13px ${FONT}`, color: BRAND.text }}>Auto-fill from Feishu</div>
         <div style={{ font: `400 11px ${FONT}`, color: feishu.error ? BRAND.red : BRAND.textSupporting, marginTop: 2 }}>
-          {feishu.error || "Sign in to fill in your name, position and photo automatically."}
+          {feishu.error || "Sign in to fill in your name and photo automatically."}
         </div>
       </div>
       <button type="button" style={{ ...btnPrimary, flexShrink: 0 }} onClick={onSignIn}>
@@ -340,14 +354,15 @@ const labelStyle = { display: "block", font: `600 12px ${FONT}`, color: BRAND.te
 const errorStyle = { font: `400 11px ${FONT}`, color: BRAND.red, marginTop: 4 };
 
 export default function App() {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     name: "",
     title: "",
     mobile: "",
     email: "",
     linkedin: "",
     photoDataUrl: "",
-  });
+    ...loadSavedFields(),
+  }));
   const [admin, setAdmin] = useState({
     website: OFFICIAL_WEBSITE_URL,
     logoUrl: DEFAULT_LOGO_SVG,
@@ -357,13 +372,17 @@ export default function App() {
   });
   const [adminOpen, setAdminOpen] = useState(false);
   const [showPhoto, setShowPhoto] = useState(false);
-  const [showLinkedin, setShowLinkedin] = useState(false);
+  const [showLinkedin, setShowLinkedin] = useState(() => !!form.linkedin);
   const [cropSrc, setCropSrc] = useState(null);
   const [copyMsg, setCopyMsg] = useState("");
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
   const customBannerInputRef = useRef(null);
   const [feishu, setFeishu] = useState({ status: "loading", profile: null, error: "" });
+
+  useEffect(() => {
+    storeSavedFields(form);
+  }, [form.title, form.mobile, form.email, form.linkedin]);
 
   // Fills the form from a Feishu profile. Only fields Feishu actually returned are touched,
   // so anything missing (e.g. mobile) stays editable by hand.
@@ -375,7 +394,6 @@ export default function App() {
     setForm((f) => ({
       ...f,
       name: profileName(p) || f.name,
-      title: p.title || f.title,
       email: p.email || f.email,
       mobile: p.mobile || f.mobile,
       photoDataUrl: photo || f.photoDataUrl,
@@ -396,8 +414,6 @@ export default function App() {
       .then((profile) => {
         if (cancelled) return;
         if (profile) {
-          // Debug aid: everything Feishu returned for this user (no tokens)
-          console.log("[feishu] SSO data", profile.raw);
           setFeishu({ status: "signed-in", profile, error: "" });
           applyProfile(profile);
         } else {

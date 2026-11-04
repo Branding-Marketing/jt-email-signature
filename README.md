@@ -1,7 +1,8 @@
 # J&T Express Australia — Email Signature Generator
 
-Staff sign in with Feishu and the form is pre-filled with their name, position and
-avatar. Every field stays editable, and the page still works without signing in.
+Staff sign in with Feishu and the form is pre-filled with their name and avatar. Job
+title, mobile, email and LinkedIn are typed in once and remembered in the browser. Every
+field stays editable, and the page still works without signing in.
 
 ## Architecture
 
@@ -23,9 +24,8 @@ The root `index.html` is the old self-contained build and is no longer the sourc
    signed CSRF `state` cookie.
 2. Feishu redirects to `/api/auth/feishu/callback`. The Worker exchanges the code for a
    user token, stores it in the sealed session cookie and redirects to `/`.
-3. The page calls `/api/me`, which reads `authen/v1/user_info` (name, English name, email,
-   avatar) and `directory/v1/employees/mget` with `work_info.positions` (main position).
-   The avatar is returned as a data URL so the page can draw it on a canvas.
+3. The page calls `/api/me`, which reads `authen/v1/user_info` (name, English name,
+   avatar, plus email/mobile when those scopes are granted). The avatar is returned as a data URL so the page can draw it on a canvas.
 
 ## One-time setup
 
@@ -34,11 +34,11 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 1. Enable the **Web App** capability.
 2. Security Settings → Redirect URLs: add `https://<worker host>/api/auth/feishu/callback`
    (`npm run deploy` prints the Worker host; add a custom domain's URL too if you attach one).
-3. Permissions (app identity): `directory:employee:read` and
-   `directory:employee.work.positions:read` for the position, plus
-   `directory:employee.base.name.another_name:read` for the alias (别名), which is used as
-   the signature name when set. The contact permission range must cover all staff.
-   Name and avatar also come from the login itself and need no extra scope.
+3. Permissions: none beyond login are required. Name, English name and avatar come from
+   `authen/v1/user_info`. Job title is typed in by staff (and remembered in their browser)
+   because the directory API needs `directory:employee:read`, which requires admin review.
+   If `contact:user.email:readonly` / `contact:user.phone:readonly` are granted as user
+   scopes, add them to `FEISHU_OAUTH_SCOPE` in `wrangler.toml` to fill email and mobile.
 4. Publish a version so the tenant admin can approve it.
 
 ## Deploy (local CLI)

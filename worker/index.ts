@@ -26,7 +26,7 @@ function credentials(env: Env): FeishuCredentials {
   return {
     appId: env.FEISHU_APP_ID,
     appSecret: env.FEISHU_APP_SECRET,
-    scope: (env.FEISHU_OAUTH_SCOPE ?? 'directory:employee.work.positions:read').trim(),
+    scope: (env.FEISHU_OAUTH_SCOPE ?? '').trim(),
   };
 }
 
@@ -92,7 +92,7 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     const session = sealed ? await unseal<Session>(sealed, env.SESSION_SECRET) : null;
     if (!session || session.e < Date.now()) return json({ error: 'not_signed_in' }, 401);
     try {
-      return json(await loadProfile(credentials(env), session.t));
+      return json(await loadProfile(session.t));
     } catch (err) {
       console.error('[feishu] profile failed:', (err as Error).message);
       return json({ error: 'not_signed_in' }, 401, cookie(req, SESSION_COOKIE, '', 0));
