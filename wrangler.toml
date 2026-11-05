@@ -22,9 +22,9 @@ not_found_handling = "single-page-application"
 # Let the Worker handle API routes before static asset matching
 run_worker_first = ["/api/*", "/img/*"]
 
-# Hosted signature images. Gmail and the new Outlook drop base64 images in a pasted signature,
-# so the copied HTML links to /img/<sha256>.<ext> served from this bucket. Create it once with:
-#   npx wrangler r2 bucket create jt-signature-images
-[[r2_buckets]]
+# Per-person signature images (photo, custom banner), linked from pasted signatures as
+# /img/<sha256>.<ext>. Workers KV is on the free plan and needs no payment method. Create the
+# namespace once with `npx wrangler kv namespace create IMAGES` and paste its id below.
+[[kv_namespaces]]
 binding = "IMAGES"
-bucket_name = "jt-signature-images"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

@@ -11,7 +11,7 @@ export interface Env {
   /** Static assets built by Webpack (dist/public), see wrangler.toml */
   ASSETS: Fetcher;
   /** Hosted signature images (banner, photo, icons), see wrangler.toml and worker/images.ts */
-  IMAGES: R2Bucket;
+  IMAGES: KVNamespace;
 }
 
 interface Session {
