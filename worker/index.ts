@@ -1,5 +1,6 @@
 import { randomId, seal, sign, unseal, unsign } from './crypto';
 import { buildAuthorizeUrl, exchangeCode, loadProfile, type FeishuCredentials } from './feishu';
+import { IMAGE_PATH_PREFIX, serveImage, uploadImage } from './images';
 
 export interface Env {
   FEISHU_APP_ID: string;
@@ -9,6 +10,8 @@ export interface Env {
   FEISHU_OAUTH_SCOPE?: string;
   /** Static assets built by Webpack (dist/public), see wrangler.toml */
   ASSETS: Fetcher;
+  /** Hosted signature images (banner, photo, icons), see wrangler.toml and worker/images.ts */
+  IMAGES: R2Bucket;
 }
 
 interface Session {
@@ -55,6 +58,12 @@ function json(body: unknown, status = 200, ...cookies: string[]): Response {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+async function readSession(req: Request, env: Env): Promise<Session | null> {
+  const sealed = readCookie(req, SESSION_COOKIE);
+  const session = sealed ? await unseal<Session>(sealed, env.SESSION_SECRET) : null;
+  return session && session.e >= Date.now() ? session : null;
+}
+
 async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
   const callbackUrl = `${url.origin}${CALLBACK_PATH}`;
 
@@ -88,10 +97,8 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   if (url.pathname === '/api/me' && req.method === 'GET') {
-    const sealed = readCookie(req, SESSION_COOKIE);
-    const session = sealed ? await unseal<Session>(sealed, env.SESSION_SECRET) : null;
-    if (!session || session.e < Date.now()) return json({ error: 'not_signed_in' }, 401);
-    try {
+    const session = await readSession(req, env);
+    if (!session) return json({ error: 'not_signed_in' }, 401);    try {
       return json(await loadProfile(session.t));
     } catch (err) {
       console.error('[feishu] profile failed:', (err as Error).message);
@@ -103,6 +110,12 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     return new Response(null, { status: 204, headers: { 'Set-Cookie': cookie(req, SESSION_COOKIE, '', 0) } });
   }
 
+  // Only signed-in staff may upload, so the Worker cannot be used as an open image host.
+  if (url.pathname === '/api/images' && req.method === 'POST') {
+    if (!(await readSession(req, env))) return json({ error: 'not_signed_in' }, 401);
+    return uploadImage(req, env.IMAGES, url.origin);
+  }
+
   if (url.pathname === '/api/health') return json({ status: 'ok' });
   return json({ error: 'not_found' }, 404);
 }
@@ -111,6 +124,7 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/api/')) return handleApi(req, env, url);
+    if (url.pathname.startsWith(IMAGE_PATH_PREFIX) && req.method === 'GET') return serveImage(url.pathname, env.IMAGES);
     // Everything else is the static signature page
     return env.ASSETS.fetch(req);
   },

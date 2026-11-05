@@ -59,6 +59,21 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// Uploads a PNG/JPEG data URL to the Worker (worker/images.ts) and returns its public https URL.
+async function hostImage(dataUrl) {
+  const blob = await (await fetch(dataUrl)).blob();
+  const res = await fetch("/api/images", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": blob.type || "application/octet-stream" },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+  const { url } = await res.json();
+  if (!/^https:\/\//.test(url) && window.location.hostname !== "localhost") throw new Error("Image upload returned a non-https URL");
+  return url;
+}
+
 function escapeHtml(str) {
   return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -641,10 +656,8 @@ export default function App() {
   // Email-safe export. The preview is deliberately not copied: it uses absolute positioning,
   // container units and overlapping layers that Outlook/Gmail are free to rewrite. Instead we
   // generate a conservative table layout with real, clickable text and a flattened visual panel.
-  const copyEmailSafeSignature = async () => {
-    if (!validate()) return;
-    setCopyMsg("Preparing email signature…");
-
+  // Resolves to { html, allHosted }. allHosted is false when any image had to stay inline.
+  const buildEmailSignature = async () => {
     // Preserve the original artwork's exact aspect ratio (including future banners).
     // The preview uses width:100% / height:auto, so the email must do the same.
     let bannerImg = null;
@@ -694,6 +707,24 @@ export default function App() {
       linkedinCtx.fillText("in", 28, 30);
       linkedinDataUrl = linkedinCanvas.toDataURL("image/png");
     }
+    // Gmail and the new Outlook drop data: images in a pasted signature, so each image is
+    // uploaded and linked by URL. Uploading needs a Feishu session; without one (or if an
+    // upload fails) that image stays inline, which still works in classic desktop Outlook.
+    const canHost = feishu.status === "signed-in";
+    const hostOrInline = async (dataUrl) => {
+      if (!dataUrl || !canHost) return { src: dataUrl, hosted: false };
+      try {
+        return { src: await hostImage(dataUrl), hosted: true };
+      } catch {
+        return { src: dataUrl, hosted: false };
+      }
+    };
+    const [banner, photo, linkedin] = await Promise.all([
+      hostOrInline(visualDataUrl),
+      hostOrInline(usePhoto ? form.photoDataUrl : ""),
+      hostOrInline(linkedinDataUrl),
+    ]);
+    const allHosted = [banner, usePhoto && photo, useLinkedin && linkedin].filter(Boolean).every((img) => img.hosted);
     const phoneHref = String(form.mobile || "").replace(/[^+\d]/g, "");
     const websiteHref = escapeHtml(normalizeUrl(admin.website));
     const bannerHref = activeBannerLink.trim() ? escapeHtml(normalizeUrl(activeBannerLink)) : "";
@@ -706,10 +737,10 @@ export default function App() {
     const photoCell = hasSocial ? `<td width="94" align="center" valign="top" style="width:94px;padding:0;vertical-align:top;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="94" height="160" style="width:94px;height:160px;border-collapse:collapse;">
         <tr><td height="93" align="center" valign="top" style="height:93px;text-align:center;vertical-align:top;">
-          ${usePhoto ? `<img src="${form.photoDataUrl}" alt="${escapeHtml(form.name)}" width="76" height="76" style="display:block;margin:0 auto;width:76px;height:76px;border:3px solid #ffffff;border-radius:50%;" />` : "&nbsp;"}
+          ${usePhoto ? `<img src="${escapeHtml(photo.src)}" alt="${escapeHtml(form.name)}" width="76" height="76" style="display:block;margin:0 auto;width:76px;height:76px;border:3px solid #ffffff;border-radius:50%;" />` : "&nbsp;"}
         </td></tr>
         <tr><td height="67" align="center" valign="bottom" style="height:67px;text-align:center;vertical-align:bottom;padding-bottom:1px;">
-          ${useLinkedin ? `<a href="${escapeHtml(normalizeUrl(form.linkedin))}" style="text-decoration:none;"><img src="${linkedinDataUrl}" alt="LinkedIn" width="28" height="28" style="display:block;margin:0 auto;width:28px;height:28px;border:0;outline:none;" /></a>` : "&nbsp;"}
+          ${useLinkedin ? `<a href="${escapeHtml(normalizeUrl(form.linkedin))}" style="text-decoration:none;"><img src="${escapeHtml(linkedin.src)}" alt="LinkedIn" width="28" height="28" style="display:block;margin:0 auto;width:28px;height:28px;border:0;outline:none;" /></a>` : "&nbsp;"}
         </td></tr>
       </table>
     </td>` : "";
@@ -754,19 +785,40 @@ export default function App() {
     <td width="6" bgcolor="#D9291C" style="width:6px;background-color:#D9291C;font-size:0;line-height:0;">&nbsp;</td>
     <td width="644" bgcolor="#ffffff" style="width:644px;padding:0;background-color:#ffffff;">
       ${bannerHref ? `<a href="${bannerHref}" style="display:block;text-decoration:none;border:0;">` : ""}
-      <img src="${visualDataUrl}" width="644" height="${emailBannerHeight}" alt="J&amp;T Express Australia" style="display:block;width:644px;height:${emailBannerHeight}px;border:0;outline:none;text-decoration:none;" />
+      <img src="${escapeHtml(banner.src)}" width="644" height="${emailBannerHeight}" alt="J&amp;T Express Australia" style="display:block;width:644px;height:${emailBannerHeight}px;border:0;outline:none;text-decoration:none;" />
       ${bannerHref ? "</a>" : ""}
     </td>
   </tr>
 </table>`;
 
+    return { html, allHosted };
+  };
+
+  const copyEmailSafeSignature = async () => {
+    if (!validate()) return;
+    setCopyMsg(feishu.status === "signed-in" ? "Uploading images and preparing email signature…" : "Preparing email signature…");
+
+    // Start building now and hand the clipboard a promise, so the slow part (drawing and
+    // uploading images) does not outlive the click's permission to write to the clipboard.
+    const built = buildEmailSignature();
+    let allHosted = false;
     try {
-      const blob = new Blob([html], { type: "text/html" });
       const plainText = `${form.name}\n${form.title}\nJ&T Express Australia\n${form.mobile || ""}\n${form.email}\n${admin.website}`;
-      const item = new ClipboardItem({ "text/html": blob, "text/plain": new Blob([plainText], { type: "text/plain" }) });
+      const item = new ClipboardItem({
+        "text/html": built.then((b) => new Blob([b.html], { type: "text/html" })),
+        "text/plain": new Blob([plainText], { type: "text/plain" }),
+      });
       await navigator.clipboard.write([item]);
+      allHosted = (await built).allHosted;
     } catch {
       // Legacy fallback: select the rendered signature, never the HTML source code.
+      let html;
+      try {
+        ({ html, allHosted } = await built);
+      } catch {
+        setCopyMsg("The signature could not be created. Please try again.");
+        return;
+      }
       const holder = document.createElement("div");
       holder.setAttribute("contenteditable", "true");
       holder.style.position = "fixed";
@@ -786,8 +838,17 @@ export default function App() {
         return;
       }
     }
-    setCopyMsg("Copied — ready to paste into your email signature settings.");
-    setTimeout(() => setCopyMsg(""), 3000);
+    if (allHosted) {
+      setCopyMsg("Copied — ready to paste into your email signature settings.");
+      setTimeout(() => setCopyMsg(""), 3000);
+    } else {
+      setCopyMsg(
+        feishu.status === "signed-in"
+          ? "Copied, but some images could not be uploaded, so they may not show in Gmail or the new Outlook. Please try copying again."
+          : "Copied. Images are embedded, so they may not show in Gmail or the new Outlook — sign in with Feishu above and copy again to fix this.",
+      );
+      setTimeout(() => setCopyMsg(""), 12000);
+    }
   };
 
   return (
