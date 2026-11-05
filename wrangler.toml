@@ -20,4 +20,11 @@ directory = "./dist/public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 # Let the Worker handle API routes before static asset matching
-run_worker_first = ["/api/*"]
+run_worker_first = ["/api/*", "/img/*"]
+
+# Hosted signature images. Gmail and the new Outlook drop base64 images in a pasted signature,
+# so the copied HTML links to /img/<sha256>.<ext> served from this bucket. Create it once with:
+#   npx wrangler r2 bucket create jt-signature-images
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "jt-signature-images"

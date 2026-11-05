@@ -13,6 +13,13 @@ A single **Cloudflare Worker** (`jt-signature`) serves everything:
 - **API** — `worker/`, handles `/api/*`, holds the Feishu App Secret and runs the OAuth
   flow. It is stateless: the Feishu user token is sealed (AES-GCM, keyed by
   `SESSION_SECRET`) into an HttpOnly cookie, so no KV or database is needed.
+- **Hosted images** — `worker/images.ts`. Gmail and the new Outlook / Outlook on the web
+  drop base64 (`data:`) images in a pasted signature, so "Copy email signature" uploads the
+  banner, photo and LinkedIn icon (`POST /api/images`, signed-in users only, PNG/JPEG up to
+  2 MB) to the R2 bucket `jt-signature-images` and links them as
+  `https://<worker host>/img/<sha256>.<ext>`. Files are named by content hash, so the shared
+  banner is stored once and links never change. If the user is not signed in, or an upload
+  fails, that image stays embedded and the page tells the user to sign in and copy again.
 
 Deployment is manual from a local machine with the wrangler CLI (no CI).
 
@@ -48,6 +55,7 @@ The root `index.html` is the old self-contained build and is no longer the sourc
 ```bash
 npm ci
 npx wrangler login                     # once per machine
+npx wrangler r2 bucket create jt-signature-images   # once per account (R2 must be enabled)
 npm run deploy                         # builds the page and deploys the Worker
 
 # Once (and whenever a value changes). Each command prompts for the value.
