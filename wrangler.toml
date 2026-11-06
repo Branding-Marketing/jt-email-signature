@@ -13,7 +13,7 @@ workers_dev = true
 # contact:user.employee:readonly -> job title
 # contact:user.email:readonly    -> email
 # contact:user.phone:readonly    -> mobile
-FEISHU_OAUTH_SCOPE = "contact:contact.base:readonly contact:user.base:readonly contact:user.email:readonly"
+FEISHU_OAUTH_SCOPE = "contact:contact.base:readonly contact:user.base:readonly contact:user.employee:readonly contact:user.email:readonly contact:user.phone:readonly"
 
 [assets]
 directory = "./dist/public"
