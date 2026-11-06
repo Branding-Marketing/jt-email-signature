@@ -6,6 +6,11 @@ import { StepBadge } from "@/components/StepBadge";
 
 const GUIDES = [
   {
+    id: "feishu",
+    label: "Feishu Mail",
+    steps: ["Open Feishu → Mail, then click the settings (gear) icon.", "Go to Signature, add a new signature and paste with Ctrl/Cmd + V.", "Set it as the default for new emails and replies, then Save."],
+  },
+  {
     id: "outlook-classic",
     label: "Outlook (classic)",
     steps: ["Open File → Options → Mail → Signatures.", "Click New, name it “J&T”, then paste with Ctrl/Cmd + V.", "Choose it for new messages and replies, then click OK."],
@@ -33,7 +38,7 @@ export function InstallGuide({ className }) {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue={GUIDES[0].id}>
-          <TabsList className="max-w-full overflow-x-auto">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-flex sm:h-9 sm:w-fit">
             {GUIDES.map((g) => (
               <TabsTrigger key={g.id} value={g.id}>
                 {g.label}

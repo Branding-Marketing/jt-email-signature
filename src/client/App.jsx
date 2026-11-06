@@ -433,7 +433,7 @@ export default function App() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Paste into Outlook or Gmail ↓</span>
+              <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Paste into Feishu, Outlook or Gmail ↓</span>
             </CardFooter>
           </Card>
 
