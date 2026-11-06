@@ -410,15 +410,18 @@ export default function App() {
     if (params.has("feishu")) window.history.replaceState(null, "", window.location.pathname);
     let cancelled = false;
     fetch("/api/me", { credentials: "same-origin" })
-      .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null)
-      .then((profile) => {
+      .then(async (res) => (res.ok ? { profile: await res.json() } : { status: res.status }))
+      .catch(() => ({ status: 0 }))
+      .then(({ profile, status }) => {
         if (cancelled) return;
         if (profile) {
           setFeishu({ status: "signed-in", profile, error: "" });
           applyProfile(profile);
-        } else {
+        } else if (status === 401) {
           setFeishu({ status: "signed-out", profile: null, error: loginError });
+        } else {
+          // Session is kept on the server side; a refresh retries without signing in again
+          setFeishu({ status: "signed-out", profile: null, error: "Feishu is temporarily unavailable. Please refresh the page in a moment." });
         }
       });
     return () => { cancelled = true; };

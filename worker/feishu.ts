@@ -37,13 +37,42 @@ interface FeishuEnvelope<T> {
   data?: T;
 }
 
+/** Feishu codes meaning the user access token itself is invalid or expired. */
+const INVALID_USER_TOKEN_CODES = new Set([20005, 99991668, 99991677]);
+
+export class FeishuError extends Error {
+  readonly status: number;
+  readonly code: number | undefined;
+
+  constructor(message: string, status: number, code: number | undefined) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+
+  /** True only when signing in again is the fix; anything else may be transient. */
+  get isInvalidToken(): boolean {
+    return this.status === 401 || (this.code !== undefined && INVALID_USER_TOKEN_CODES.has(this.code));
+  }
+}
+
 async function feishuFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8' };
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
-  const res = await fetch(`${OPEN_API}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${OPEN_API}${path}`, { ...init, headers });
+  } catch (err) {
+    // Network failure: status 0 marks it as transient
+    throw new FeishuError(`Feishu ${path} unreachable: ${(err as Error).message}`, 0, undefined);
+  }
   const body = (await res.json().catch(() => ({}))) as FeishuEnvelope<T>;
   if (!res.ok || body.code !== 0) {
-    throw new Error(`Feishu ${path} failed: HTTP ${res.status}, code ${body.code}, ${body.msg ?? body.error_description ?? ''}`);
+    throw new FeishuError(
+      `Feishu ${path} failed: HTTP ${res.status}, code ${body.code}, ${body.msg ?? body.error_description ?? ''}`,
+      res.status,
+      body.code,
+    );
   }
   // The token endpoint returns its fields at the top level rather than under `data`
   return (body.data ?? body) as T;

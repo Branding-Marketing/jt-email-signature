@@ -1,5 +1,5 @@
 import { randomId, seal, sign, unseal, unsign } from './crypto';
-import { buildAuthorizeUrl, exchangeCode, loadProfile, type FeishuCredentials } from './feishu';
+import { FeishuError, buildAuthorizeUrl, exchangeCode, loadProfile, type FeishuCredentials } from './feishu';
 
 export interface Env {
   FEISHU_APP_ID: string;
@@ -95,7 +95,14 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
       return json(await loadProfile(session.t));
     } catch (err) {
       console.error('[feishu] profile failed:', (err as Error).message);
-      return json({ error: 'not_signed_in' }, 401, cookie(req, SESSION_COOKIE, '', 0));
+      // Only drop the session when Feishu says the token is invalid or expired.
+      // Anything else (network, rate limit, 5xx) keeps the session so a retry works.
+      if (err instanceof FeishuError && err.isInvalidToken) {
+        return json({ error: 'not_signed_in' }, 401, cookie(req, SESSION_COOKIE, '', 0));
+      }
+      const res = json({ error: 'feishu_unavailable' }, 503);
+      res.headers.set('Retry-After', '5');
+      return res;
     }
   }
 
