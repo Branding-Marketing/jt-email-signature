@@ -12,7 +12,7 @@ A single **Cloudflare Worker** (`jt-signature`) serves everything:
   `allowJs`) into `dist/public`, served as Worker static assets.
 - **API** — `worker/`, handles `/api/*`, holds the Feishu App Secret and runs the OAuth
   flow. It is stateless: the Feishu user token is sealed (AES-GCM, keyed by
-  `SESSION_SECRET`) into an HttpOnly cookie, so no KV or database is needed.
+  `SESSION_SECRET`) into an HttpOnly cookie, so login needs no KV or database.
 - **Email images** — Gmail and the new Outlook / Outlook on the web drop base64 (`data:`)
   images in a pasted signature, so the copied signature links every image by URL:
   - Fixed artwork in `src/client/email/` (official banner with logo, Australia DSP banner,
