@@ -8,8 +8,11 @@ field stays editable, and the page still works without signing in.
 
 A single **Cloudflare Worker** (`jt-signature`) serves everything:
 
-- **Page** — `src/client`, React 19 (`App.jsx`) bundled by Webpack (ts-loader with
-  `allowJs`) into `dist/public`, served as Worker static assets.
+- **Page** — `src/client`, React 19 + [shadcn/ui](https://ui.shadcn.com) (Radix UI +
+  Tailwind CSS v4), bundled by Webpack (ts-loader with `allowJs`, PostCSS for Tailwind) into
+  `dist/public`, served as Worker static assets. `App.jsx` is the page, `components/ui` holds the
+  shadcn components (`components.json` is set up, so `npx shadcn add <name>` works), and
+  `lib/signature.js` builds the copied HTML and the PNG.
 - **API** — `worker/`, handles `/api/*`, holds the Feishu App Secret and runs the OAuth
   flow. It is stateless: the Feishu user token is sealed (AES-GCM, keyed by
   `SESSION_SECRET`) into an HttpOnly cookie, so no KV or database is needed.
