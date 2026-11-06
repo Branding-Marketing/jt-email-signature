@@ -1,0 +1,23 @@
+# One Cloudflare Worker serves both the signature page and the Feishu login API.
+# Secrets (FEISHU_APP_ID, FEISHU_APP_SECRET, SESSION_SECRET) are set with `wrangler secret put`.
+name = "jt-signature"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# Optional user-identity scopes requested at login (space separated). Every scope listed
+# must be enabled for the app in the Feishu console, or Feishu rejects the login.
+# contact:contact.base:readonly -> required to call contact/v3/users at all
+# contact:user.base:readonly    -> nickname (used as the signature name)
+# contact:user.employee:readonly -> job title
+# contact:user.email:readonly    -> email
+# contact:user.phone:readonly    -> mobile
+FEISHU_OAUTH_SCOPE = "contact:contact.base:readonly contact:user.base:readonly contact:user.email:readonly"
+
+[assets]
+directory = "./dist/public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# Let the Worker handle API routes before static asset matching
+run_worker_first = ["/api/*"]
