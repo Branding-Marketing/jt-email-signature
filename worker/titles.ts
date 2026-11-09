@@ -8,7 +8,8 @@ export const TITLE_TRANSLATIONS: Record<string, string> = {
 
   // Departments
   总经办: 'GM Office',
-  市场网管部: 'Marketing & Network Management Department',
+  // Network Management is called Fleet Management (see 网络管理 below)
+  市场网管部: 'Marketing & Fleet Management Department',
   人资行政部: 'Human Resources & Administration Department',
   信息科技部: 'IT Department',
   财务部: 'Finance Department',
@@ -19,7 +20,7 @@ export const TITLE_TRANSLATIONS: Record<string, string> = {
   法律合规: 'Legal & Compliance',
   采购: 'Procurement',
 
-  // Marketing & Network Management Department
+  // Marketing & Fleet Management Department
   市场营销: 'Sales & Marketing',
   // The org chart says "Network Management"; "Fleet Management" is used on purpose
   网络管理: 'Fleet Management',
