@@ -110,8 +110,6 @@ export default function App() {
       .then(({ profile, status }) => {
         if (cancelled) return;
         if (profile) {
-          // DEBUG(feishu-title): remove after title mapping is fixed
-          console.log("[feishu raw profile]", JSON.stringify(profile.raw ?? profile, null, 2));
           setFeishu({ status: "signed-in", profile, error: "" });
           applyProfile(profile);
         } else if (status === 401) {

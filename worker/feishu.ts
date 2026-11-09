@@ -21,22 +21,16 @@ export interface FeishuProfile {
   enName: string;
   /** Contact nickname (usually the English name); needs contact:user.base:readonly */
   nickname: string;
-  /** Contact job title; needs contact:user.employee:readonly */
+  /**
+   * Job title; needs contact:user.employee:readonly. Taken from job_title, or from the
+   * custom attribute FEISHU_TITLE_ATTR_ID when job_title is empty (how this tenant stores it).
+   */
   title: string;
   /** Present only when the matching contact scope is granted and requested at login */
   email: string;
   mobile: string;
   /** Avatar as a data: URL so the browser can draw it on a canvas without CORS issues */
   avatarDataUrl: string;
-  // DEBUG(feishu-title): remove after title mapping is fixed
-  raw: FeishuRawProfile;
-}
-
-// DEBUG(feishu-title): remove after title mapping is fixed
-export interface FeishuRawProfile {
-  userInfo: Record<string, unknown>;
-  contactUser: Record<string, unknown>;
-  contactError?: string;
 }
 
 interface FeishuEnvelope<T> {
@@ -130,6 +124,35 @@ interface ContactUser {
   enterprise_email?: string;
   email?: string;
   mobile?: string;
+  custom_attrs?: { id: string; type?: string; value?: { text?: string } }[];
+}
+
+/** Custom attribute that holds the job title in this tenant's Feishu directory. */
+export const DEFAULT_TITLE_ATTR_ID = 'C-7230622014020894723';
+
+export interface ProfileOptions {
+  /** Id of the custom attribute used as the job title when job_title is empty */
+  titleAttrId?: string;
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+
+/** Custom attribute text may come back HTML-escaped (e.g. "O&amp;M"). */
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => HTML_ENTITIES[entity]);
+}
+
+function jobTitle(contact: ContactUser, titleAttrId: string): string {
+  const direct = (contact.job_title ?? '').trim();
+  if (direct) return direct;
+  const attr = contact.custom_attrs?.find((a) => a.id === titleAttrId);
+  return decodeEntities(attr?.value?.text ?? '').trim();
 }
 
 /**
@@ -137,27 +160,17 @@ interface ContactUser {
  * returned when the matching user scope was granted at login, so missing scopes just
  * leave fields empty. Any failure is logged and treated as "no extra data".
  */
-async function fetchContactUser(
-  openId: string,
-  userToken: string,
-): Promise<{ user: ContactUser; error?: string }> {
+async function fetchContactUser(openId: string, userToken: string): Promise<ContactUser> {
   try {
     const data = await feishuFetch<{ user?: ContactUser }>(
       `/contact/v3/users/${encodeURIComponent(openId)}?user_id_type=open_id`,
       { token: userToken },
     );
-    return { user: data.user ?? {} };
+    return data.user ?? {};
   } catch (err) {
-    const message = (err as Error).message;
-    console.warn('[feishu] contact lookup failed:', message);
-    // DEBUG(feishu-title): remove after title mapping is fixed
-    return { user: {}, error: message };
+    console.warn('[feishu] contact lookup failed:', (err as Error).message);
+    return {};
   }
-}
-
-// DEBUG(feishu-title): remove after title mapping is fixed
-function withoutTokens(obj: object): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(obj).filter(([key]) => !/token/i.test(key)));
 }
 
 async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
@@ -173,28 +186,21 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
   }
 }
 
-export async function loadProfile(userToken: string): Promise<FeishuProfile> {
+export async function loadProfile(userToken: string, options: ProfileOptions = {}): Promise<FeishuProfile> {
+  const titleAttrId = options.titleAttrId || DEFAULT_TITLE_ATTR_ID;
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
-  const [{ user: contact, error: contactError }, avatarDataUrl] = await Promise.all([
+  const [contact, avatarDataUrl] = await Promise.all([
     fetchContactUser(info.open_id, userToken),
     fetchAvatarDataUrl(info.avatar_big || info.avatar_url),
   ]);
-  // DEBUG(feishu-title): remove after title mapping is fixed
-  const raw: FeishuRawProfile = {
-    userInfo: withoutTokens(info),
-    contactUser: withoutTokens(contact),
-    ...(contactError ? { contactError } : {}),
-  };
-  console.log('[feishu raw profile]', JSON.stringify(raw));
   return {
     openId: info.open_id,
     name: info.name ?? '',
     enName: info.en_name || contact.en_name || '',
     nickname: (contact.nickname ?? '').trim(),
-    title: (contact.job_title ?? '').trim(),
+    title: jobTitle(contact, titleAttrId),
     email: info.enterprise_email || info.email || contact.enterprise_email || contact.email || '',
     mobile: info.mobile || contact.mobile || '',
     avatarDataUrl,
-    raw, // DEBUG(feishu-title): remove after title mapping is fixed
   };
 }
