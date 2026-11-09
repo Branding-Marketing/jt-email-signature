@@ -33,7 +33,7 @@ There is no test suite or linter. CI (`.github/workflows/deploy.yml`) builds and
   - `GET /api/auth/feishu/callback` → exchanges the code, seals the user token (AES-GCM, `SESSION_SECRET`, `worker/crypto.ts`) into an HttpOnly cookie, redirects to `/` (or `/?feishu=<error>`).
   - `GET /api/me` → Feishu profile (`worker/feishu.ts`), avatar returned as a data URL so the client can draw it on a canvas. 401 when signed out.
   - `POST /api/auth/logout`, `GET /api/health`.
-  - Stateless: no KV or database. Secrets (`FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `SESSION_SECRET`) live in Cloudflare. Optional scopes are listed in `FEISHU_OAUTH_SCOPE` in `wrangler.toml`; every listed scope must be enabled in the Feishu console or login fails. The job title comes from `job_title`, or, when that is empty (as in this tenant), from the directory custom attribute `FEISHU_TITLE_ATTR_ID`.
+  - Stateless: no KV or database. Secrets (`FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `SESSION_SECRET`) live in Cloudflare. Optional scopes are listed in `FEISHU_OAUTH_SCOPE` in `wrangler.toml`; every listed scope must be enabled in the Feishu console or login fails. The job title comes from `job_title`, or, when that is empty (as in this tenant), from the directory custom attribute `FEISHU_TITLE_ATTR_ID`. Feishu titles are Chinese and are translated to English via `TITLE_TRANSLATIONS` in `worker/titles.ts`; add new titles there (unknown Chinese titles are left blank and logged as `[feishu] untranslated job title` in `wrangler tail`).
 - Root `index.html` — the **old** self-contained build. It is no longer the source of truth; do not edit it for new work.
 
 ## Architecture

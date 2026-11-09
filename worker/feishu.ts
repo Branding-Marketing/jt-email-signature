@@ -1,4 +1,5 @@
 import { toBase64 } from './crypto';
+import { translateTitle } from './titles';
 
 const OPEN_API = 'https://open.feishu.cn/open-apis';
 const AUTHORIZE_URL = 'https://accounts.feishu.cn/open-apis/authen/v1/authorize';
@@ -198,7 +199,7 @@ export async function loadProfile(userToken: string, options: ProfileOptions = {
     name: info.name ?? '',
     enName: info.en_name || contact.en_name || '',
     nickname: (contact.nickname ?? '').trim(),
-    title: jobTitle(contact, titleAttrId),
+    title: translateTitle(jobTitle(contact, titleAttrId)),
     email: info.enterprise_email || info.email || contact.enterprise_email || contact.email || '',
     mobile: info.mobile || contact.mobile || '',
     avatarDataUrl,
