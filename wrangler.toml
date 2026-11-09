@@ -14,6 +14,10 @@ workers_dev = true
 # contact:user.email:readonly    -> email
 # contact:user.phone:readonly    -> mobile
 FEISHU_OAUTH_SCOPE = "contact:contact.base:readonly contact:user.base:readonly contact:user.employee:readonly contact:user.email:readonly contact:user.phone:readonly"
+# Id of the Feishu directory custom attribute (TEXT) that holds the job title. Used when the
+# standard job_title field is empty, which it is in this tenant. Find it in custom_attrs of
+# contact/v3/users; needs the contact:user.employee:readonly scope above.
+FEISHU_TITLE_ATTR_ID = "C-7230622014020894723"
 
 [assets]
 directory = "./dist/public"

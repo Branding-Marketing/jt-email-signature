@@ -1,5 +1,12 @@
 import { randomId, seal, sign, unseal, unsign } from './crypto';
-import { FeishuError, buildAuthorizeUrl, exchangeCode, loadProfile, type FeishuCredentials } from './feishu';
+import {
+  DEFAULT_TITLE_ATTR_ID,
+  FeishuError,
+  buildAuthorizeUrl,
+  exchangeCode,
+  loadProfile,
+  type FeishuCredentials,
+} from './feishu';
 
 export interface Env {
   FEISHU_APP_ID: string;
@@ -7,6 +14,8 @@ export interface Env {
   SESSION_SECRET: string;
   /** Optional override for the scopes requested at login, see wrangler.toml */
   FEISHU_OAUTH_SCOPE?: string;
+  /** Optional id of the Feishu custom attribute that holds the job title, see wrangler.toml */
+  FEISHU_TITLE_ATTR_ID?: string;
   /** Static assets built by Webpack (dist/public), see wrangler.toml */
   ASSETS: Fetcher;
 }
@@ -92,7 +101,8 @@ async function handleApi(req: Request, env: Env, url: URL): Promise<Response> {
     const session = sealed ? await unseal<Session>(sealed, env.SESSION_SECRET) : null;
     if (!session || session.e < Date.now()) return json({ error: 'not_signed_in' }, 401);
     try {
-      return json(await loadProfile(session.t));
+      const titleAttrId = (env.FEISHU_TITLE_ATTR_ID ?? '').trim() || DEFAULT_TITLE_ATTR_ID;
+      return json(await loadProfile(session.t, { titleAttrId }));
     } catch (err) {
       console.error('[feishu] profile failed:', (err as Error).message);
       // Only drop the session when Feishu says the token is invalid or expired.

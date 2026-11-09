@@ -21,7 +21,10 @@ export interface FeishuProfile {
   enName: string;
   /** Contact nickname (usually the English name); needs contact:user.base:readonly */
   nickname: string;
-  /** Contact job title; needs contact:user.employee:readonly */
+  /**
+   * Job title; needs contact:user.employee:readonly. Taken from job_title, or from the
+   * custom attribute FEISHU_TITLE_ATTR_ID when job_title is empty (how this tenant stores it).
+   */
   title: string;
   /** Present only when the matching contact scope is granted and requested at login */
   email: string;
@@ -121,6 +124,35 @@ interface ContactUser {
   enterprise_email?: string;
   email?: string;
   mobile?: string;
+  custom_attrs?: { id: string; type?: string; value?: { text?: string } }[];
+}
+
+/** Custom attribute that holds the job title in this tenant's Feishu directory. */
+export const DEFAULT_TITLE_ATTR_ID = 'C-7230622014020894723';
+
+export interface ProfileOptions {
+  /** Id of the custom attribute used as the job title when job_title is empty */
+  titleAttrId?: string;
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+
+/** Custom attribute text may come back HTML-escaped (e.g. "O&amp;M"). */
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => HTML_ENTITIES[entity]);
+}
+
+function jobTitle(contact: ContactUser, titleAttrId: string): string {
+  const direct = (contact.job_title ?? '').trim();
+  if (direct) return direct;
+  const attr = contact.custom_attrs?.find((a) => a.id === titleAttrId);
+  return decodeEntities(attr?.value?.text ?? '').trim();
 }
 
 /**
@@ -154,7 +186,8 @@ async function fetchAvatarDataUrl(url: string | undefined): Promise<string> {
   }
 }
 
-export async function loadProfile(userToken: string): Promise<FeishuProfile> {
+export async function loadProfile(userToken: string, options: ProfileOptions = {}): Promise<FeishuProfile> {
+  const titleAttrId = options.titleAttrId || DEFAULT_TITLE_ATTR_ID;
   const info = await feishuFetch<UserInfo>('/authen/v1/user_info', { token: userToken });
   const [contact, avatarDataUrl] = await Promise.all([
     fetchContactUser(info.open_id, userToken),
@@ -165,7 +198,7 @@ export async function loadProfile(userToken: string): Promise<FeishuProfile> {
     name: info.name ?? '',
     enName: info.en_name || contact.en_name || '',
     nickname: (contact.nickname ?? '').trim(),
-    title: (contact.job_title ?? '').trim(),
+    title: jobTitle(contact, titleAttrId),
     email: info.enterprise_email || info.email || contact.enterprise_email || contact.email || '',
     mobile: info.mobile || contact.mobile || '',
     avatarDataUrl,
